@@ -37,7 +37,7 @@ export default function SignupPage() {
       return;
     }
     setLoading(true);
-    // Mock signup — will be replaced by Lovable Cloud auth
+    // Mock signup
     await new Promise((r) => setTimeout(r, 600));
     setLoading(false);
     toast.success("Cadastro realizado!", {
