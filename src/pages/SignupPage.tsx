@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
 import logoUvv from "@/assets/logo-uvv.png";
 import { CURSOS } from "@/data/mockData";
+import { supabase } from "@/lib/supabase";
 
 export default function SignupPage() {
   const navigate = useNavigate();
@@ -36,14 +37,51 @@ export default function SignupPage() {
       toast.error("A senha deve ter pelo menos 6 caracteres");
       return;
     }
+    if (form.matricula.length !== 9) {
+      toast.error("A matrícula deve ter exatamente 9 caracteres");
+      return;
+    }
+
     setLoading(true);
-    // Mock signup
-    await new Promise((r) => setTimeout(r, 600));
-    setLoading(false);
-    toast.success("Cadastro realizado!", {
-      description: "Faça login com suas credenciais para acessar.",
-    });
-    navigate("/login");
+    try {
+      // 1. Cria usuário no Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: form.email,
+        password: form.password,
+      });
+
+      if (authError) throw authError;
+      const userId = authData.user?.id;
+      if (!userId) throw new Error("Erro ao criar usuário");
+
+      // 2. Insere na tabela `usuarios`
+      const { error: userError } = await supabase.from("usuarios").insert({
+        id: userId,
+        nome: form.nome,
+        email: form.email,
+        matricula: form.matricula,
+        role: "aluno",
+      });
+      if (userError) throw userError;
+
+      // 3. Insere na tabela `alunos`
+      const { error: alunoError } = await supabase.from("alunos").insert({
+        user_id: userId,
+        curso: form.curso,
+        periodo: Number(form.periodo),
+        matricula: form.matricula,
+      });
+      if (alunoError) throw alunoError;
+
+      toast.success("Cadastro realizado!", {
+        description: "Verifique seu e-mail e faça login.",
+      });
+      navigate("/login");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Erro ao criar conta");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const valid =

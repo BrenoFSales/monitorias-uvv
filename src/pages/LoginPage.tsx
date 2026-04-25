@@ -12,7 +12,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -21,15 +21,25 @@ export default function LoginPage() {
     try {
       await login(email, password);
       toast.success("Login realizado com sucesso!");
-      if (email.includes("monitor")) navigate("/monitor");
-      else if (email.includes("coord")) navigate("/coordenador");
-      else navigate("/aluno");
-    } catch {
-      toast.error("Credenciais inválidas");
+      // Redireciona com base na role vinda do banco
+      const role = user?.role; // ainda pode ser null aqui por timing
+      // Por isso usamos o navigate dentro do useEffect no AuthContext,
+      // mas uma alternativa simples é ler direto após o login:
+    } catch (err: any) {
+      toast.error(err?.message ?? "Credenciais inválidas");
     } finally {
       setLoading(false);
     }
   };
+
+  // Redireciona assim que user for preenchido pelo AuthContext
+  // (evita race condition entre setUser e navigate)
+  const { user: authUser } = useAuth();
+  if (authUser) {
+    if (authUser.role === "monitor") navigate("/monitor", { replace: true });
+    else if (authUser.role === "coordenador") navigate("/coordenador", { replace: true });
+    else navigate("/aluno", { replace: true });
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center gradient-hero p-4">
@@ -43,11 +53,25 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">E-mail</Label>
-              <Input id="email" type="email" placeholder="seu.email@uvv.br" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <Input
+                id="email"
+                type="email"
+                placeholder="seu.email@uvv.br"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Senha</Label>
-              <Input id="password" type="password" placeholder="••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
+              <Input
+                id="password"
+                type="password"
+                placeholder="••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Entrando..." : "Entrar"}
@@ -59,12 +83,6 @@ export default function LoginPage() {
               </Link>
             </p>
           </form>
-          <div className="mt-6 p-3 rounded-md bg-muted text-xs text-muted-foreground space-y-1">
-            <p className="font-semibold">Demo — use um dos e-mails abaixo (senha: 123456):</p>
-            <p>Aluno: <span className="font-mono">aluno@uvv.br</span></p>
-            <p>Monitor: <span className="font-mono">monitor@uvv.br</span></p>
-            <p>Coordenador: <span className="font-mono">coord@uvv.br</span></p>
-          </div>
         </CardContent>
       </Card>
     </div>

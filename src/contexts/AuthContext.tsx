@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { supabase } from "@/lib/supabase";
 import { UserRole } from "@/types/models";
 
 interface AuthUser {
@@ -12,33 +13,77 @@ interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock users for demo
-const MOCK_USERS: (AuthUser & { password: string })[] = [
-  { id: "a1", nome: "João Aluno", email: "aluno@uvv.br", matricula: "2024001", role: "aluno", password: "123456" },
-  { id: "m1", nome: "Carlos Silva", email: "monitor@uvv.br", matricula: "2023010", role: "monitor", password: "123456" },
-  { id: "c1", nome: "Prof. Mariana", email: "coord@uvv.br", matricula: "2020001", role: "coordenador", password: "123456" },
-];
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true); // começa true para hidratar sessão
 
-  const login = async (email: string, _password: string) => {
-    const found = MOCK_USERS.find((u) => u.email === email);
-    if (!found) throw new Error("Usuário não encontrado");
-    const { password: _, ...userData } = found;
-    setUser(userData);
+  // Busca dados do usuário na tabela `usuarios` pelo id do Auth
+  const fetchUsuario = async (authId: string): Promise<AuthUser | null> => {
+    const { data, error } = await supabase
+      .from("usuarios")
+      .select("id, nome, email, matricula, role")
+      .eq("id", authId)
+      .single();
+
+    if (error || !data) return null;
+
+    return {
+      id: data.id,
+      nome: data.nome,
+      email: data.email,
+      matricula: data.matricula,
+      role: data.role as UserRole,
+    };
   };
 
-  const logout = () => setUser(null);
+  // Hidrata sessão ao montar (recarregar página)
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const u = await fetchUsuario(session.user.id);
+        setUser(u);
+      }
+      setLoading(false);
+    });
+
+    // Ouve mudanças de sessão (login/logout em outras abas, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        if (session?.user) {
+          const u = await fetchUsuario(session.user.id);
+          setUser(u);
+        } else {
+          setUser(null);
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const login = async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+
+    const u = await fetchUsuario(data.user.id);
+    if (!u) throw new Error("Usuário não encontrado na base de dados");
+    setUser(u);
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user, loading }}>
       {children}
     </AuthContext.Provider>
   );
