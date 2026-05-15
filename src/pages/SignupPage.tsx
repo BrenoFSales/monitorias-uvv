@@ -8,8 +8,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
 import logoUvv from "@/assets/logo-uvv.png";
-import { CURSOS } from "@/data/mockData";
 import { supabase } from "@/lib/supabase";
+
+const CURSOS = [
+  "Administração",
+  "Arquitetura e Urbanismo",
+  "Ciência da Computação",
+  "Direito",
+  "Engenharia Civil",
+  "Engenharia de Software",
+  "Medicina",
+  "Psicologia",
+];
 
 export default function SignupPage() {
   const navigate = useNavigate();

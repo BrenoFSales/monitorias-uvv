@@ -17,6 +17,7 @@ import CoordenadorDashboard from "@/pages/coordenador/CoordenadorDashboard";
 import CoordenadorRelatorios from "@/pages/coordenador/CoordenadorRelatorios";
 import CoordenadorMonitores from "@/pages/coordenador/CoordenadorMonitores";
 import NotFound from "@/pages/NotFound";
+import SeedPage from "@/pages/SeedPage"; // REMOVER APÓS USO
 
 const queryClient = new QueryClient();
 
@@ -27,7 +28,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
 
   return (
     <Routes>
@@ -62,6 +71,7 @@ function AppRoutes() {
         <Route path="monitores" element={<CoordenadorMonitores />} />
       </Route>
 
+      <Route path="/seed" element={<SeedPage />} /> {/* REMOVER APÓS USO */}
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

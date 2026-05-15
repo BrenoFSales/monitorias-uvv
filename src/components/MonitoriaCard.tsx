@@ -1,7 +1,7 @@
 import { Monitoria } from "@/types/models";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/StatusBadge";
-import { CalendarDays, Clock, GraduationCap, MapPin, User } from "lucide-react";
+import { CalendarDays, Clock, MapPin, User } from "lucide-react";
 import { ReactNode } from "react";
 
 interface Props {
@@ -10,39 +10,37 @@ interface Props {
 }
 
 export function MonitoriaCard({ monitoria, actions }: Props) {
+  const nomeDisciplina = monitoria.disciplinas?.nome ?? "—";
+  const nomeMonitor = monitoria.monitores?.usuarios?.nome ?? monitoria.monitor_nome;
+  const dataHora = new Date(monitoria.data_hora_inicio);
+  const dataFmt = dataHora.toLocaleDateString("pt-BR");
+  const horaFmt = dataHora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <CardTitle className="text-base">{monitoria.disciplina}</CardTitle>
-            {monitoria.curso && (
-              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                <GraduationCap className="h-3 w-3" />
-                {monitoria.curso}
-              </p>
-            )}
-          </div>
+          <CardTitle className="text-base">{nomeDisciplina}</CardTitle>
           <StatusBadge status={monitoria.status} />
         </div>
       </CardHeader>
       <CardContent className="space-y-2 text-sm text-muted-foreground">
         <div className="flex items-center gap-2">
           <CalendarDays className="h-4 w-4" />
-          <span>{new Date(monitoria.data + "T00:00:00").toLocaleDateString("pt-BR")}</span>
+          <span>{dataFmt}</span>
         </div>
         <div className="flex items-center gap-2">
           <Clock className="h-4 w-4" />
-          <span>{monitoria.horario}</span>
+          <span>{horaFmt}</span>
         </div>
         <div className="flex items-center gap-2">
           <MapPin className="h-4 w-4" />
           <span>{monitoria.local}</span>
         </div>
-        {monitoria.monitor_nome && (
+        {nomeMonitor && (
           <div className="flex items-center gap-2">
             <User className="h-4 w-4" />
-            <span>{monitoria.monitor_nome}</span>
+            <span>{nomeMonitor}</span>
           </div>
         )}
       </CardContent>

@@ -20,48 +20,47 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+async function fetchUsuario(authId: string): Promise<AuthUser | null> {
+  const { data, error } = await supabase
+    .from("usuarios")
+    .select("id, nome, email, matricula, role")
+    .eq("id", authId)
+    .single();
+
+  if (error || !data) return null;
+
+  return {
+    id: data.id,
+    nome: data.nome,
+    email: data.email,
+    matricula: data.matricula,
+    role: data.role as UserRole,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true); // começa true para hidratar sessão
+  const [loading, setLoading] = useState(true);
 
-  // Busca dados do usuário na tabela `usuarios` pelo id do Auth
-  const fetchUsuario = async (authId: string): Promise<AuthUser | null> => {
-    const { data, error } = await supabase
-      .from("usuarios")
-      .select("id, nome, email, matricula, role")
-      .eq("id", authId)
-      .single();
-
-    if (error || !data) return null;
-
-    return {
-      id: data.id,
-      nome: data.nome,
-      email: data.email,
-      matricula: data.matricula,
-      role: data.role as UserRole,
-    };
-  };
-
-  // Hidrata sessão ao montar (recarregar página)
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        const u = await fetchUsuario(session.user.id);
-        setUser(u);
-      }
-      setLoading(false);
-    });
-
-    // Ouve mudanças de sessão (login/logout em outras abas, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (session?.user) {
-          const u = await fetchUsuario(session.user.id);
-          setUser(u);
-        } else {
+      (event, session) => {
+        if (!session?.user) {
           setUser(null);
+          // Só encerra o loading no evento inicial — para os outros já está false
+          if (event === "INITIAL_SESSION") setLoading(false);
+          return;
         }
+
+        const userId = session.user.id;
+
+        // setTimeout(0) é essencial: tira o fetchUsuario do contexto de lock
+        // interno do Supabase auth, evitando deadlock com o próprio onAuthStateChange
+        setTimeout(async () => {
+          const u = await fetchUsuario(userId);
+          setUser(u);
+          if (event === "INITIAL_SESSION") setLoading(false);
+        }, 0);
       }
     );
 

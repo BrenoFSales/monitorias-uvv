@@ -1,43 +1,84 @@
-import { useState } from "react";
-import { mockMonitorias } from "@/data/mockData";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 import { MonitoriaCard } from "@/components/MonitoriaCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { ArrowLeft, BookOpen, ChevronRight, GraduationCap, Search } from "lucide-react";
+import { AlertCircle, GraduationCap, Search } from "lucide-react";
 
 export default function AlunoBuscar() {
-  const [selectedCurso, setSelectedCurso] = useState<string | null>(null);
-  const [searchCurso, setSearchCurso] = useState("");
-  const [searchDisciplina, setSearchDisciplina] = useState("");
+  const { user } = useAuth();
+  const [monitorias, setMonitorias] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [semPerfil, setSemPerfil] = useState(false);
+  const [search, setSearch] = useState("");
+  const [inscrevendo, setInscrevendo] = useState<string | null>(null);
 
-  // Step 1 — list of cursos that have monitorias
-  const cursosDisponiveis = [...new Set(mockMonitorias.map((m) => m.curso))].sort();
-  const cursosFiltrados = cursosDisponiveis.filter((c) =>
-    c.toLowerCase().includes(searchCurso.toLowerCase())
-  );
+  useEffect(() => {
+    if (!user) return;
+    fetchTudo();
+  }, [user]);
 
-  // Step 2 — monitorias filtered by selected curso
-  const monitoriasDoCurso = selectedCurso
-    ? mockMonitorias.filter(
-        (m) =>
-          m.curso === selectedCurso &&
-          (m.disciplina.toLowerCase().includes(searchDisciplina.toLowerCase()) ||
-            m.local.toLowerCase().includes(searchDisciplina.toLowerCase()))
-      )
-    : [];
+  async function fetchTudo() {
+    setLoading(true);
+    const { data: perfil } = await supabase
+      .from("alunos")
+      .select("user_id")
+      .eq("user_id", user!.id)
+      .maybeSingle();
 
-  const countByCurso = (curso: string) =>
-    mockMonitorias.filter((m) => m.curso === curso && m.status === "aberta").length;
+    if (!perfil) {
+      setSemPerfil(true);
+      setLoading(false);
+      return;
+    }
 
-  const handleInscrever = () => {
-    toast.success("Inscrição realizada com sucesso!", {
-      description: "Você receberá uma confirmação por e-mail.",
-    });
+    await fetchMonitorias();
+    setLoading(false);
+  }
+
+  async function fetchMonitorias() {
+    const { data } = await supabase
+      .from("monitorias")
+      .select(`*, disciplinas(nome), monitores!monitor_id(usuarios(nome))`)
+      .eq("status", "agendada")
+      .order("data_hora_inicio", { ascending: true });
+    setMonitorias(data ?? []);
+  }
+
+  const filtradas = monitorias.filter((m) => {
+    const nome = (m.disciplinas?.nome ?? "").toLowerCase();
+    const local = (m.local ?? "").toLowerCase();
+    const q = search.toLowerCase();
+    return nome.includes(q) || local.includes(q);
+  });
+
+  const handleInscrever = async (monitoriaId: string) => {
+    if (!user) return;
+    setInscrevendo(monitoriaId);
+    const { error } = await supabase
+      .from("inscricoes")
+      .insert({ aluno_id: user.id, monitoria_id: monitoriaId, status: "confirmada", presente: false });
+    if (error) {
+      if (error.code === "23503") {
+        toast.error("Perfil de aluno incompleto.", {
+          description: "Seu cadastro está incompleto. Fale com o coordenador.",
+        });
+      } else {
+        toast.error("Erro ao realizar inscrição. Tente novamente.");
+      }
+    } else {
+      toast.success("Inscrição realizada com sucesso!", {
+        description: "Você receberá uma confirmação por e-mail.",
+      });
+      fetchMonitorias();
+    }
+    setInscrevendo(null);
   };
 
-  if (!selectedCurso) {
+  if (semPerfil) {
     return (
       <div className="space-y-6">
         <div>
@@ -45,50 +86,18 @@ export default function AlunoBuscar() {
             <GraduationCap className="h-6 w-6 text-secondary" />
             Buscar Monitorias
           </h2>
-          <p className="text-muted-foreground text-sm mt-1">
-            Passo 1: selecione o curso para ver as disciplinas disponíveis
-          </p>
         </div>
-
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar curso..."
-            className="pl-9"
-            value={searchCurso}
-            onChange={(e) => setSearchCurso(e.target.value)}
-          />
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {cursosFiltrados.map((curso) => (
-            <Card
-              key={curso}
-              className="cursor-pointer hover:shadow-md hover:border-primary transition-all"
-              onClick={() => {
-                setSelectedCurso(curso);
-                setSearchDisciplina("");
-              }}
-            >
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg gradient-primary flex items-center justify-center text-primary-foreground">
-                  <GraduationCap className="h-5 w-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm truncate">{curso}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {countByCurso(curso)} monitoria(s) aberta(s)
-                  </p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </CardContent>
-            </Card>
-          ))}
-          {cursosFiltrados.length === 0 && (
-            <p className="col-span-full text-center text-muted-foreground py-8">
-              Nenhum curso encontrado.
+        <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
+          <AlertCircle className="h-5 w-5 mt-0.5 shrink-0" />
+          <div className="space-y-1 text-sm">
+            <p className="font-semibold">Perfil de aluno incompleto</p>
+            <p className="text-muted-foreground">
+              Seu usuário não possui registro na tabela <code>alunos</code>. O cadastro não foi concluído corretamente.
             </p>
-          )}
+            <p className="text-muted-foreground">
+              Delete este usuário no painel do Supabase e rode o seed novamente, ou solicite ao coordenador.
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -96,24 +105,14 @@ export default function AlunoBuscar() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mb-2 -ml-2"
-            onClick={() => setSelectedCurso(null)}
-          >
-            <ArrowLeft className="h-4 w-4 mr-1" /> Trocar curso
-          </Button>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <BookOpen className="h-6 w-6 text-secondary" />
-            {selectedCurso}
-          </h2>
-          <p className="text-muted-foreground text-sm mt-1">
-            Passo 2: escolha uma disciplina para se inscrever
-          </p>
-        </div>
+      <div>
+        <h2 className="text-2xl font-bold flex items-center gap-2">
+          <GraduationCap className="h-6 w-6 text-secondary" />
+          Buscar Monitorias
+        </h2>
+        <p className="text-muted-foreground text-sm mt-1">
+          Encontre monitorias disponíveis e inscreva-se
+        </p>
       </div>
 
       <div className="relative">
@@ -121,31 +120,42 @@ export default function AlunoBuscar() {
         <Input
           placeholder="Buscar disciplina ou local..."
           className="pl-9"
-          value={searchDisciplina}
-          onChange={(e) => setSearchDisciplina(e.target.value)}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {monitoriasDoCurso.map((m) => (
-          <MonitoriaCard
-            key={m.id}
-            monitoria={m}
-            actions={
-              m.status === "aberta" ? (
-                <Button size="sm" className="w-full" onClick={handleInscrever}>
-                  Inscrever-se
+      {loading ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-48 rounded-xl" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filtradas.map((m) => (
+            <MonitoriaCard
+              key={m.id}
+              monitoria={m}
+              actions={
+                <Button
+                  size="sm"
+                  className="w-full"
+                  onClick={() => handleInscrever(m.id)}
+                  disabled={inscrevendo === m.id}
+                >
+                  {inscrevendo === m.id ? "Inscrevendo..." : "Inscrever-se"}
                 </Button>
-              ) : null
-            }
-          />
-        ))}
-        {monitoriasDoCurso.length === 0 && (
-          <p className="col-span-full text-center text-muted-foreground py-8">
-            Nenhuma monitoria encontrada para este curso.
-          </p>
-        )}
-      </div>
+              }
+            />
+          ))}
+          {filtradas.length === 0 && (
+            <p className="col-span-full text-center text-muted-foreground py-8">
+              Nenhuma monitoria disponível.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
